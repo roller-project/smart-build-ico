@@ -1,0 +1,335 @@
+// In this sample code an ICO deadline is set. ICO runs till the specified time and then based on if soft target achieved 
+// or not it is labelled successful or failed. If failed, the investors can pull their ethers back else owner can claim the ethers
+// in lieu of sold tokens. This code is just for educational purposes.
+
+pragma solidity ^0.4.16;
+
+contract Token {
+
+    string internal _symbol;
+    string internal _name;
+
+    uint8 internal _decimals;
+    uint internal _totalSupply;
+
+    mapping (address => uint) internal _balanceOf;
+    mapping (address => mapping (address => uint)) internal _allowances;
+
+    function Token(string symbol, string name, uint8 decimals, uint totalSupply) public {
+        _symbol = symbol;
+        _name = name;
+        _decimals = decimals;
+        _totalSupply = totalSupply;
+    }
+
+    function name()
+        public
+        view
+        returns (string) {
+        return _name;
+    }
+
+    function symbol()
+        public
+        view
+        returns (string) {
+        return _symbol;
+    }
+
+    function decimals()
+        public
+        view
+        returns (uint8) {
+        return _decimals;
+    }
+
+    function totalSupply()
+        public
+        view
+        returns (uint) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address _addr) public view returns (uint);
+    function transfer(address _to, uint _value) public returns (bool);
+    event Transfer(address indexed _from, address indexed _to, uint _value);
+}
+
+interface ERC20 {
+    function transferFrom(address _from, address _to, uint _value) public returns (bool);
+    function approve(address _spender, uint _value) public returns (bool);
+    function allowance(address _owner, address _spender) public view returns (uint);
+    event Approval(address indexed _owner, address indexed _spender, uint _value);
+}
+
+interface ERC223 {
+    function transfer(address _to, uint _value, bytes _data) public returns (bool);
+    event Transfer(address indexed from, address indexed to, uint value, bytes indexed data);
+}
+
+contract ERC223ReceivingContract {
+    function tokenFallback(address _from, uint _value, bytes _data) public;
+}
+
+library SafeMath {
+  function sub(uint _base, uint _value)
+    internal
+    pure
+    returns (uint) {
+    assert(_value <= _base);
+    return _base - _value;
+  }
+
+  function add(uint _base, uint _value)
+    internal
+    pure
+    returns (uint _ret) {
+    _ret = _base + _value;
+    assert(_ret >= _base);
+  }
+
+  function div(uint _base, uint _value)
+    internal
+    pure
+    returns (uint) {
+    assert(_value > 0 && (_base % _value) == 0);
+    return _base / _value;
+  }
+
+  function mul(uint _base, uint _value)
+    internal
+    pure
+    returns (uint _ret) {
+    _ret = _base * _value;
+    assert(0 == _base || _ret / _base == _value);
+  }
+}
+
+library Addresses {
+  function isContract(address _base) internal constant returns (bool) {
+      uint codeSize;
+      assembly {
+          codeSize := extcodesize(_base)
+      }
+      return codeSize > 0;
+  }
+}
+
+contract MOO is Token("MOO", "MOO Token", 0, 1000000000000000000), ERC20, ERC223 {
+
+    using SafeMath for uint;
+    using Addresses for address;
+
+    address owner;
+    address public beneficiary;
+    uint public fundingGoal;
+    uint public amountRaised;
+    uint public deadline;
+    uint public price;
+    bool fundingGoalReached = false;
+    bool crowdsaleClosed = false;
+
+    event GoalReached(address recipient, uint totalAmountRaised);
+    event FundTransfer(address backer, uint amount, bool isContribution);
+
+    function MOO(
+            address ifSuccessfulSendTo,
+            uint fundingGoalInEthers,
+            uint durationInMinutes,
+            uint etherCostOfEachToken
+        )
+        public {
+        owner = msg.sender;
+        _balanceOf[msg.sender] = _totalSupply;
+        beneficiary = ifSuccessfulSendTo;
+        fundingGoal = fundingGoalInEthers * 1 ether;
+        deadline = now + durationInMinutes * 1 minutes;
+        price = etherCostOfEachToken * 1 wei;
+    }
+
+   modifier OnlyOwner() {
+      require(owner == msg.sender);
+      _;
+   }
+
+   /**
+     * Fallback function
+     *
+     * The function without name is the default function that is called whenever anyone sends funds to a contract
+     */
+    function () payable public {
+        FundTransfer(msg.sender, msg.value, true);
+    }
+
+    function buy() public payable returns (uint amount) {
+        require(!crowdsaleClosed);
+        amount = msg.value;
+        require(amount > 0);
+        uint b_bal = amount.div(price);
+        require(_balanceOf[owner] >= b_bal);
+        _balanceOf[owner] = _balanceOf[owner].sub(b_bal);
+        _balanceOf[msg.sender] = _balanceOf[msg.sender].add(b_bal);
+        amountRaised = amountRaised.add(amount);
+        FundTransfer(msg.sender, msg.value, true);
+        return amount;
+    }
+
+    modifier afterDeadline() { if (now >= deadline) _; }
+
+    /**
+     * Check if goal was reached
+     *
+     * Checks if the goal or time limit has been reached and ends the campaign
+     */
+    function checkGoalReached() public afterDeadline {
+        if (amountRaised >= fundingGoal){
+            fundingGoalReached = true;
+            GoalReached(beneficiary, amountRaised);
+        }
+        crowdsaleClosed = true;
+    }
+
+    /**
+    * Check if time is up
+    */
+    function isTimeUp() public view returns(bool) {
+        if(now > deadline) {
+            return true;
+        }
+        return false;
+    }
+
+    function return_now() public view returns(uint) {
+        return now;
+    }
+
+     /**
+     * Withdraw the funds
+     *
+     * Checks to see if goal or time limit has been reached, and if so, and the funding goal was reached,
+     * sends the entire amount to the beneficiary. If goal was not reached, each contributor can withdraw
+     * the amount they contributed.
+     */
+
+    function safeWithdrawal() public afterDeadline {
+        if (!fundingGoalReached) {
+            uint amount = _balanceOf[msg.sender];  // no of tokens
+            uint refund_amount = price.mul(amount); // total amount paid for the tokens
+            _balanceOf[msg.sender] = 0;
+            if (amount > 0) {
+                if ((refund_amount > 0) && msg.sender.send(refund_amount)) {
+                    _balanceOf[owner] = _balanceOf[owner].add(amount);
+                    FundTransfer(msg.sender, refund_amount, false);
+                } else {
+                    _balanceOf[msg.sender] = amount;
+                }
+            }
+        }
+
+        if (fundingGoalReached && beneficiary == msg.sender) {
+            if (beneficiary.send(amountRaised)) {
+                FundTransfer(beneficiary, amountRaised, false);
+            } else {
+                //If we fail to send the funds to beneficiary, unlock funders balance
+                fundingGoalReached = false;
+            }
+        }
+    }
+
+    function totalSupply()
+        public
+        view
+        returns (uint) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address _addr)
+        public
+        view
+        returns (uint) {
+        return _balanceOf[_addr];
+    }
+
+    function transfer(address _to, uint _value)
+        public
+        returns (bool) {
+        return transfer(_to, _value, "");
+    }
+
+    function transfer(address _to, uint _value, bytes _data)
+        public
+        returns (bool) {
+        if (_value > 0 && _value <= _balanceOf[msg.sender]) {
+
+            if (_to.isContract()) {
+              ERC223ReceivingContract _contract = ERC223ReceivingContract(_to);
+              _contract.tokenFallback(msg.sender, _value, _data);
+            }
+
+            _balanceOf[msg.sender] = _balanceOf[msg.sender].sub(_value);
+            _balanceOf[_to] = _balanceOf[_to].add(_value);
+
+            return true;
+        }
+        return false;
+    }
+
+    function transferFrom(address _from, address _to, uint _value)
+        public
+        OnlyOwner
+        returns (bool) {
+        return transferFrom(_from, _to, _value, "");
+    }
+
+    function transferFrom(address _from, address _to, uint _value, bytes _data)
+        public
+        OnlyOwner
+        returns (bool) {
+        if (_allowances[_from][msg.sender] > 0 &&
+            _value > 0 &&
+            _allowances[_from][msg.sender] >= _value &&
+            _balanceOf[_from] >= _value) {
+
+              _allowances[_from][msg.sender] = _allowances[_from][msg.sender].sub(_value);
+
+              if (_to.isContract()) {
+                ERC223ReceivingContract _contract = ERC223ReceivingContract(_to);
+                _contract.tokenFallback(msg.sender, _value, _data);
+              }
+
+            _balanceOf[_from] = _balanceOf[_from].sub(_value);
+            _balanceOf[_to] = _balanceOf[_to].add(_value);
+
+            Transfer(_from, _to, _value);
+
+            return true;
+        }
+        return false;
+    }
+
+    function approve(address _spender, uint _value)
+        public
+        returns (bool) {
+        if (_balanceOf[msg.sender] >= _value) {
+          _allowances[msg.sender][_spender] = _value;
+          Approval(msg.sender, _spender, _value);
+          return true;
+        }
+        return false;
+    }
+
+    function allowance(address _owner, address _spender)
+        public
+        view
+        returns (uint) {
+        if (_allowances[_owner][_spender] < _balanceOf[_owner]) {
+          return _allowances[_owner][_spender];
+        }
+        return _balanceOf[_owner];
+    }
+
+    function kill() OnlyOwner public {
+        selfdestruct(owner);
+    }
+}
+
