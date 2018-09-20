@@ -115,135 +115,7 @@ library Addresses {
   }
 }
 
-contract MOO is Token("MOO", "MOO Token", 0, 1000000000000000000), ERC20, ERC223 {
-
-    using SafeMath for uint;
-    using Addresses for address;
-
-    address owner;
-    address public beneficiary;
-    uint public fundingGoal;
-    uint public amountRaised;
-    uint public deadline;
-    uint public price;
-    bool fundingGoalReached = false;
-    bool crowdsaleClosed = false;
-
-    event G…
-[12:34 PM, 2/13/2018] +91 70047 80931: pragma solidity ^0.4.16;
-
-contract Token {
-
-    string internal _symbol;
-    string internal _name;
-
-    uint8 internal _decimals;
-    uint internal _totalSupply;
-
-    mapping (address => uint) internal _balanceOf;
-    mapping (address => mapping (address => uint)) internal _allowances;
-
-    function Token(string symbol, string name, uint8 decimals, uint totalSupply) public {
-        _symbol = symbol;
-        _name = name;
-        _decimals = decimals;
-        _totalSupply = totalSupply;
-    }
-
-    function name()
-        public
-        view
-        returns (string) {
-        return _name;
-    }
-
-    function symbol()
-        public
-        view
-        returns (string) {
-        return _symbol;
-    }
-
-    function decimals()
-        public
-        view
-        returns (uint8) {
-        return _decimals;
-    }
-
-    function totalSupply()
-        public
-        view
-        returns (uint) {
-        return _totalSupply;
-    }
-
-    function balanceOf(address _addr) public view returns (uint);
-    function transfer(address _to, uint _value) public returns (bool);
-    event Transfer(address indexed _from, address indexed _to, uint _value);
-}
-
-interface ERC20 {
-    function transferFrom(address _from, address _to, uint _value) public returns (bool);
-    function approve(address _spender, uint _value) public returns (bool);
-    function allowance(address _owner, address _spender) public view returns (uint);
-    event Approval(address indexed _owner, address indexed _spender, uint _value);
-}
-
-interface ERC223 {
-    function transfer(address _to, uint _value, bytes _data) public returns (bool);
-    event Transfer(address indexed from, address indexed to, uint value, bytes indexed data);
-}
-
-contract ERC223ReceivingContract {
-    function tokenFallback(address _from, uint _value, bytes _data) public;
-}
-
-library SafeMath {
-  function sub(uint _base, uint _value)
-    internal
-    pure
-    returns (uint) {
-    assert(_value <= _base);
-    return _base - _value;
-  }
-
-  function add(uint _base, uint _value)
-    internal
-    pure
-    returns (uint _ret) {
-    _ret = _base + _value;
-    assert(_ret >= _base);
-  }
-
-  function div(uint _base, uint _value)
-    internal
-    pure
-    returns (uint) {
-    assert(_value > 0 && (_base % _value) == 0);
-    return _base / _value;
-  }
-
-  function mul(uint _base, uint _value)
-    internal
-    pure
-    returns (uint _ret) {
-    _ret = _base * _value;
-    assert(0 == _base || _ret / _base == _value);
-  }
-}
-
-library Addresses {
-  function isContract(address _base) internal constant returns (bool) {
-      uint codeSize;
-      assembly {
-          codeSize := extcodesize(_base)
-      }
-      return codeSize > 0;
-  }
-}
-
-contract MOO is Token("MOO", "MOO Token", 0, 300000000), ERC20, ERC223 {
+contract ROLX is Token("ROLX", "ROL Token", 0, 2000000), ERC20, ERC223 {
 
     using SafeMath for uint;
     using Addresses for address;
@@ -260,7 +132,7 @@ contract MOO is Token("MOO", "MOO Token", 0, 300000000), ERC20, ERC223 {
     event GoalReached(address recipient, uint totalAmountRaised);
     event FundTransfer(address backer, uint amount, bool isContribution);
 
-    function MOO(
+    function ROLX(
             address ifSuccessfulSendTo,
             uint fundingGoalInEthers,
             uint durationInMinutes,
